@@ -44,10 +44,11 @@ public final class Lexer {
     public List<Token> lex() {
         List<Token> lo_tokens = new LinkedList<>();
         while (chars.has(0)) {
-            if (peek("[ \\b\\n\\r\\t]+")) {
-                while (match("[ \\b\\n\\r\\t]+")) {
+            if (peek("[ \\x08\\n\\r\\t]+")) {
+                while (match("[ \\x08\\n\\r\\t]+")) {
                     // Skipping whitespace
                 }
+                chars.skip();
             }
             else {
                 lo_tokens.add(lexToken());
@@ -77,7 +78,7 @@ public final class Lexer {
         else if (peek("\"")) {
             return lexString();
         }
-        else if (peek("[<>!=]") || peek("&") || peek("\\|") || peek("\\.")) {
+        else if (peek("[^\\s]")) {
             return lexOperator();
         }
         throw new ParseException("Invalid token within: " + chars.input, chars.index);
@@ -178,7 +179,7 @@ public final class Lexer {
         else if (match("&", "&") || match("\\|", "\\|")) {
             return chars.emit(OPERATOR);
         }
-        else if (match(".")) {
+        else if (match("[^\\s]")) {
             return chars.emit(OPERATOR);
         }
         else {
@@ -262,3 +263,7 @@ public final class Lexer {
     }
 
 }
+
+
+//0123456789
+//LET x = 5;
