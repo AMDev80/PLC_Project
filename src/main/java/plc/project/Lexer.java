@@ -145,7 +145,7 @@ public final class Lexer {
     }
 
     public Token lexString() {
-        if (match("\"")) {
+        if (!match("\"")) {
             throw new ParseException("String literal does not start with a double quote", chars.index);
         }
 
