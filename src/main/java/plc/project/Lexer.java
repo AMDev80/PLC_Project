@@ -69,7 +69,18 @@ public final class Lexer {
         if (peek("[A-Za-z_]")) {
             return lexIdentifier();
         }
-        else if (peek("[+-]") || peek("[1-9]") || peek("0")) {
+        else if (peek("[+-]")) {
+            if (!chars.has(1)) {
+                return lexOperator();
+            }
+            else if (chars.get(1) >= '0' && chars.get(1) <= '9') {
+                return lexNumber();
+            }
+            else {
+                return lexOperator();
+            }
+        }
+        else if (peek("[1-9]") || peek("0")) {
             return lexNumber();
         }
         else if (peek("'")) {
