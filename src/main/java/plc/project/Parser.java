@@ -20,7 +20,6 @@ import java.math.BigDecimal;
  * to calling those functions.
  */
 public final class Parser {
-
     private final TokenStream tokens;
 
     public Parser(List<Token> tokens) {
@@ -37,13 +36,14 @@ public final class Parser {
         while (tokens.has(0)) {
             if (peek("LET")) {
                 fields.add(parseField());
-            } else if (peek("DEF")) {
+            }
+            else if (peek("DEF")) {
                 methods.add(parseMethod());
-            } else {
+            }
+            else {
                 throw new ParseException("Expected 'LET' or 'DEF' at the beginning of a field or method.", tokens.get(0).getIndex());
             }
         }
-
         return new Ast.Source(fields, methods);
     }
 
@@ -52,16 +52,16 @@ public final class Parser {
      * next tokens start a field, aka {@code LET}.
      */
     public Ast.Field parseField() throws ParseException {
-        expect("LET");
-        Token identifierToken = expect(Token.Type.IDENTIFIER);
-        String name = identifierToken.getLiteral();
+        expect_token("LET");
+        Token identifier_token = expect_token(Token.Type.IDENTIFIER);
+        String name = identifier_token.getLiteral();
         Optional<Ast.Expression> value = Optional.empty();
 
         if (match("=")) {
             value = Optional.of(parseExpression());
         }
 
-        expect(";");
+        expect_token(";");
 
         return new Ast.Field(name, false, value);
     }
@@ -71,25 +71,26 @@ public final class Parser {
      * next tokens start a method, aka {@code DEF}.
      */
     public Ast.Method parseMethod() throws ParseException {
-        expect("DEF");
-        Token identifierToken = expect(Token.Type.IDENTIFIER);
-        String name = identifierToken.getLiteral();
+        expect_token("DEF");
+        Token identifier_token = expect_token(Token.Type.IDENTIFIER);
+        String name = identifier_token.getLiteral();
 
-        expect("(");
+        expect_token("(");
         List<String> parameters = new ArrayList<>();
         if (!peek(")")) {
             do {
-                Token paramToken = expect(Token.Type.IDENTIFIER);
-                parameters.add(paramToken.getLiteral());
-            } while (match(","));
+                Token param_token = expect_token(Token.Type.IDENTIFIER);
+                parameters.add(param_token.getLiteral());
+            }
+            while (match(","));
         }
-        expect(")");
+        expect_token(")");
 
         List<Ast.Statement> statements = new ArrayList<>();
         while (!peek("END")) {
             statements.add(parseStatement());
         }
-        expect("END");
+        expect_token("END");
 
         return new Ast.Method(name, parameters, statements);
     }
@@ -102,22 +103,31 @@ public final class Parser {
     public Ast.Statement parseStatement() throws ParseException {
         if (peek("LET")) {
             return parseDeclarationStatement();
-        } else if (peek("IF")) {
+        }
+        else if (peek("IF")) {
             return parseIfStatement();
-        } else if (peek("FOR")) {
+        }
+        else if (peek("FOR")) {
             return parseForStatement();
-        } else if (peek("WHILE")) {
+        }
+        else if (peek("WHILE")) {
             return parseWhileStatement();
-        } else if (peek("RETURN")) {
+        }
+        else if (peek("RETURN")) {
             return parseReturnStatement();
-        } else {
+        }
+        else {
             Ast.Expression expression = parseExpression();
             if (match("=")) {
+                if (!(expression instanceof Ast.Expression.Access)) {
+                    throw new ParseException("Invalid assignment target.", tokens.get(-1).getIndex());
+                }
                 Ast.Expression value = parseExpression();
-                expect(";");
+                expect_token(";");
                 return new Ast.Statement.Assignment(expression, value);
-            } else {
-                expect(";");
+            }
+            else {
+                expect_token(";");
                 return new Ast.Statement.Expression(expression);
             }
         }
@@ -129,16 +139,16 @@ public final class Parser {
      * statement, aka {@code LET}.
      */
     public Ast.Statement.Declaration parseDeclarationStatement() throws ParseException {
-        expect("LET");
-        Token identifierToken = expect(Token.Type.IDENTIFIER);
-        String name = identifierToken.getLiteral();
+        expect_token("LET");
+        Token identifier_token = expect_token(Token.Type.IDENTIFIER);
+        String name = identifier_token.getLiteral();
         Optional<Ast.Expression> value = Optional.empty();
 
         if (match("=")) {
             value = Optional.of(parseExpression());
         }
 
-        expect(";");
+        expect_token(";");
 
         return new Ast.Statement.Declaration(name, value);
     }
@@ -149,25 +159,25 @@ public final class Parser {
      * {@code IF}.
      */
     public Ast.Statement.If parseIfStatement() throws ParseException {
-        expect("IF");
+        expect_token("IF");
         Ast.Expression condition = parseExpression();
-        expect("DO");
+        expect_token("DO");
 
-        List<Ast.Statement> thenStatements = new ArrayList<>();
+        List<Ast.Statement> then_statements = new ArrayList<>();
         while (!peek("ELSE") && !peek("END")) {
-            thenStatements.add(parseStatement());
+            then_statements.add(parseStatement());
         }
 
-        List<Ast.Statement> elseStatements = new ArrayList<>();
+        List<Ast.Statement> else_statements = new ArrayList<>();
         if (match("ELSE")) {
             while (!peek("END")) {
-                elseStatements.add(parseStatement());
+                else_statements.add(parseStatement());
             }
         }
 
-        expect("END");
+        expect_token("END");
 
-        return new Ast.Statement.If(condition, thenStatements, elseStatements);
+        return new Ast.Statement.If(condition, then_statements, else_statements);
     }
 
     /**
@@ -176,31 +186,46 @@ public final class Parser {
      * {@code FOR}.
      */
     public Ast.Statement.For parseForStatement() throws ParseException {
-        expect("FOR");
-        expect("(");
+        expect_token("FOR");
+        expect_token("(");
 
-        Optional<Ast.Statement> initialization = Optional.empty();
+        Optional<Ast.Statement.Assignment> initialization = Optional.empty();
         if (!peek(";")) {
-            initialization = Optional.of(parseStatement());
+            Token identifierToken = expect_token(Token.Type.IDENTIFIER);
+            String name = identifierToken.getLiteral();
+            expect_token("=");
+            Ast.Expression value = parseExpression();
+            Ast.Expression.Access receiver = new Ast.Expression.Access(Optional.empty(), name);
+            initialization = Optional.of(new Ast.Statement.Assignment(receiver, value));
         }
-        expect(";");
+        expect_token(";");
 
         Ast.Expression condition = parseExpression();
-        expect(";");
+        expect_token(";");
 
-        Optional<Ast.Statement> increment = Optional.empty();
+        Optional<Ast.Statement.Assignment> increment = Optional.empty();
         if (!peek(")")) {
-            increment = Optional.of(parseStatement());
+            Token identifier_token = expect_token(Token.Type.IDENTIFIER);
+            String name = identifier_token.getLiteral();
+            expect_token("=");
+            Ast.Expression value = parseExpression();
+            Ast.Expression.Access receiver = new Ast.Expression.Access(Optional.empty(), name);
+            increment = Optional.of(new Ast.Statement.Assignment(receiver, value));
         }
-        expect(")");
+        expect_token(")");
 
         List<Ast.Statement> statements = new ArrayList<>();
         while (!peek("END")) {
             statements.add(parseStatement());
         }
-        expect("END");
+        expect_token("END");
 
-        return new Ast.Statement.For(initialization.orElse(null), condition, increment.orElse(null), statements);
+        return new Ast.Statement.For(
+                initialization.orElse(null),
+                condition,
+                increment.orElse(null),
+                statements
+        );
     }
 
     /**
@@ -209,16 +234,16 @@ public final class Parser {
      * {@code WHILE}.
      */
     public Ast.Statement.While parseWhileStatement() throws ParseException {
-        expect("WHILE");
+        expect_token("WHILE");
         Ast.Expression condition = parseExpression();
-        expect("DO");
+        expect_token("DO");
 
         List<Ast.Statement> statements = new ArrayList<>();
         while (!peek("END")) {
             statements.add(parseStatement());
         }
 
-        expect("END");
+        expect_token("END");
 
         return new Ast.Statement.While(condition, statements);
     }
@@ -229,9 +254,9 @@ public final class Parser {
      * {@code RETURN}.
      */
     public Ast.Statement.Return parseReturnStatement() throws ParseException {
-        expect("RETURN");
+        expect_token("RETURN");
         Ast.Expression value = parseExpression();
-        expect(";");
+        expect_token(";");
 
         return new Ast.Statement.Return(value);
     }
@@ -301,8 +326,8 @@ public final class Parser {
     public Ast.Expression parseSecondaryExpression() throws ParseException {
         Ast.Expression receiver = parsePrimaryExpression();
         while (match(".")) {
-            Token identifierToken = expect(Token.Type.IDENTIFIER);
-            String name = identifierToken.getLiteral();
+            Token identifier_token = expect_token(Token.Type.IDENTIFIER);
+            String name = identifier_token.getLiteral();
 
             if (peek("(")) {
                 match("(");
@@ -310,26 +335,30 @@ public final class Parser {
                 if (!peek(")")) {
                     do {
                         arguments.add(parseExpression());
-                    } while (match(","));
+                    }
+                    while (match(","));
                 }
-                expect(")");
+                expect_token(")");
                 receiver = new Ast.Expression.Function(Optional.of(receiver), name, arguments);
-            } else {
+            }
+            else {
                 receiver = new Ast.Expression.Access(Optional.of(receiver), name);
             }
         }
         return receiver;
     }
 
-    // helper expect function
+    // helper expect_token function
 
-    private Token expect(Object expected) throws ParseException {
+    private Token expect_token(Object expected) throws ParseException {
         if (match(expected)) {
-            return tokens.get(-1); // Return the last matched token
-        } else {
+            return tokens.get(-1); // last matched token
+        }
+        else {
             if (tokens.has(0)) {
                 throw new ParseException("Expected '" + expected + "' but found '" + tokens.get(0).getLiteral() + "'", tokens.get(0).getIndex());
-            } else {
+            }
+            else {
                 throw new ParseException("Expected '" + expected + "' but found end of input", -1);
             }
         }
@@ -344,23 +373,28 @@ public final class Parser {
     public Ast.Expression parsePrimaryExpression() throws ParseException {
         if (match("NIL")) {
             return new Ast.Expression.Literal(null);
-        } else if (match("TRUE")) {
+        }
+        else if (match("TRUE")) {
             return new Ast.Expression.Literal(Boolean.TRUE);
-        } else if (match("FALSE")) {
+        }
+        else if (match("FALSE")) {
             return new Ast.Expression.Literal(Boolean.FALSE);
-        } else if (match(Token.Type.INTEGER)) {
+        }
+        else if (match(Token.Type.INTEGER)) {
             String literal = tokens.get(-1).getLiteral();
             BigInteger value = new BigInteger(literal);
             return new Ast.Expression.Literal(value);
-        } else if (match(Token.Type.DECIMAL)) {
+        }
+        else if (match(Token.Type.DECIMAL)) {
             String literal = tokens.get(-1).getLiteral();
             BigDecimal value = new BigDecimal(literal);
             return new Ast.Expression.Literal(value);
-        } else if (match(Token.Type.CHARACTER)) {
+        }
+        else if (match(Token.Type.CHARACTER)) {
             String literal = tokens.get(-1).getLiteral();
-            // Remove surrounding single quotes
+            // removing surrounding single quotes within the token literal
             literal = literal.substring(1, literal.length() - 1);
-            // Handle escape sequences
+            // escape sequences handler
             literal = literal.replace("\\n", "\n")
                     .replace("\\t", "\t")
                     .replace("\\b", "\b")
@@ -372,11 +406,12 @@ public final class Parser {
                 throw new ParseException("Invalid character literal", tokens.get(-1).getIndex());
             }
             return new Ast.Expression.Literal(literal.charAt(0));
-        } else if (match(Token.Type.STRING)) {
+        }
+        else if (match(Token.Type.STRING)) {
             String literal = tokens.get(-1).getLiteral();
-            // Remove surrounding double quotes
+            // removing surrounding double quotes within the token literal
             literal = literal.substring(1, literal.length() - 1);
-            // Handle escape sequences
+            // esc seq handler
             literal = literal.replace("\\n", "\n")
                     .replace("\\t", "\t")
                     .replace("\\b", "\b")
@@ -385,11 +420,13 @@ public final class Parser {
                     .replace("\\\"", "\"")
                     .replace("\\\\", "\\");
             return new Ast.Expression.Literal(literal);
-        } else if (match("(")) {
+        }
+        else if (match("(")) {
             Ast.Expression expression = parseExpression();
-            expect(")");
+            expect_token(")");
             return new Ast.Expression.Group(expression);
-        } else if (match(Token.Type.IDENTIFIER)) {
+        }
+        else if (match(Token.Type.IDENTIFIER)) {
             String name = tokens.get(-1).getLiteral();
             if (match("(")) {
                 List<Ast.Expression> arguments = new ArrayList<>();
@@ -398,12 +435,14 @@ public final class Parser {
                         arguments.add(parseExpression());
                     } while (match(","));
                 }
-                expect(")");
+                expect_token(")");
                 return new Ast.Expression.Function(Optional.empty(), name, arguments);
-            } else {
+            }
+            else {
                 return new Ast.Expression.Access(Optional.empty(), name);
             }
-        } else {
+        }
+        else {
             throw new ParseException("Expected an expression", tokens.has(0) ? tokens.get(0).getIndex() : -1);
         }
     }
@@ -418,7 +457,7 @@ public final class Parser {
      * In other words, {@code Token(IDENTIFIER, "literal")} is matched by both
      * {@code peek(Token.Type.IDENTIFIER)} and {@code peek("literal")}.
      */
-    private boolean peek(Object... patterns) {
+    private boolean peek(Object... patterns) { // from class
         for (int i = 0; i < patterns.length; i++) {
             if (!tokens.has(i)) {
                 return false;
@@ -444,7 +483,7 @@ public final class Parser {
      * As in the lexer, returns {@code true} if {@link #peek(Object...)} is true
      * and advances the token stream.
      */
-    private boolean match(Object... patterns) {
+    private boolean match(Object... patterns) { // from class
         boolean peek = peek(patterns);
         if (peek) {
             for (int i = 0; i < patterns.length; i++) {
