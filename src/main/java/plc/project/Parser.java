@@ -1,6 +1,10 @@
 package plc.project;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
+import java.math.BigInteger;
+import java.math.BigDecimal;
 
 /**
  * The parser takes the sequence of tokens emitted by the lexer and turns that
@@ -27,7 +31,20 @@ public final class Parser {
      * Parses the {@code source} rule.
      */
     public Ast.Source parseSource() throws ParseException {
-        throw new UnsupportedOperationException(); //TODO
+        List<Ast.Field> fields = new ArrayList<>();
+        List<Ast.Method> methods = new ArrayList<>();
+
+        while (tokens.has(0)) {
+            if (peek("LET")) {
+                fields.add(parseField());
+            } else if (peek("DEF")) {
+                methods.add(parseMethod());
+            } else {
+                throw new ParseException("Expected 'LET' or 'DEF' at the beginning of a field or method.", tokens.get(0).getIndex());
+            }
+        }
+
+        return new Ast.Source(fields, methods);
     }
 
     /**
@@ -35,7 +52,18 @@ public final class Parser {
      * next tokens start a field, aka {@code LET}.
      */
     public Ast.Field parseField() throws ParseException {
-        throw new UnsupportedOperationException(); //TODO
+        expect("LET");
+        Token identifierToken = expect(Token.Type.IDENTIFIER);
+        String name = identifierToken.getLiteral();
+        Optional<Ast.Expression> value = Optional.empty();
+
+        if (match("=")) {
+            value = Optional.of(parseExpression());
+        }
+
+        expect(";");
+
+        return new Ast.Field(name, false, value);
     }
 
     /**
@@ -43,7 +71,27 @@ public final class Parser {
      * next tokens start a method, aka {@code DEF}.
      */
     public Ast.Method parseMethod() throws ParseException {
-        throw new UnsupportedOperationException(); //TODO
+        expect("DEF");
+        Token identifierToken = expect(Token.Type.IDENTIFIER);
+        String name = identifierToken.getLiteral();
+
+        expect("(");
+        List<String> parameters = new ArrayList<>();
+        if (!peek(")")) {
+            do {
+                Token paramToken = expect(Token.Type.IDENTIFIER);
+                parameters.add(paramToken.getLiteral());
+            } while (match(","));
+        }
+        expect(")");
+
+        List<Ast.Statement> statements = new ArrayList<>();
+        while (!peek("END")) {
+            statements.add(parseStatement());
+        }
+        expect("END");
+
+        return new Ast.Method(name, parameters, statements);
     }
 
     /**
@@ -52,7 +100,27 @@ public final class Parser {
      * statement, then it is an expression/assignment statement.
      */
     public Ast.Statement parseStatement() throws ParseException {
-        throw new UnsupportedOperationException(); //TODO
+        if (peek("LET")) {
+            return parseDeclarationStatement();
+        } else if (peek("IF")) {
+            return parseIfStatement();
+        } else if (peek("FOR")) {
+            return parseForStatement();
+        } else if (peek("WHILE")) {
+            return parseWhileStatement();
+        } else if (peek("RETURN")) {
+            return parseReturnStatement();
+        } else {
+            Ast.Expression expression = parseExpression();
+            if (match("=")) {
+                Ast.Expression value = parseExpression();
+                expect(";");
+                return new Ast.Statement.Assignment(expression, value);
+            } else {
+                expect(";");
+                return new Ast.Statement.Expression(expression);
+            }
+        }
     }
 
     /**
@@ -61,7 +129,18 @@ public final class Parser {
      * statement, aka {@code LET}.
      */
     public Ast.Statement.Declaration parseDeclarationStatement() throws ParseException {
-        throw new UnsupportedOperationException(); //TODO
+        expect("LET");
+        Token identifierToken = expect(Token.Type.IDENTIFIER);
+        String name = identifierToken.getLiteral();
+        Optional<Ast.Expression> value = Optional.empty();
+
+        if (match("=")) {
+            value = Optional.of(parseExpression());
+        }
+
+        expect(";");
+
+        return new Ast.Statement.Declaration(name, value);
     }
 
     /**
@@ -70,7 +149,25 @@ public final class Parser {
      * {@code IF}.
      */
     public Ast.Statement.If parseIfStatement() throws ParseException {
-        throw new UnsupportedOperationException(); //TODO
+        expect("IF");
+        Ast.Expression condition = parseExpression();
+        expect("DO");
+
+        List<Ast.Statement> thenStatements = new ArrayList<>();
+        while (!peek("ELSE") && !peek("END")) {
+            thenStatements.add(parseStatement());
+        }
+
+        List<Ast.Statement> elseStatements = new ArrayList<>();
+        if (match("ELSE")) {
+            while (!peek("END")) {
+                elseStatements.add(parseStatement());
+            }
+        }
+
+        expect("END");
+
+        return new Ast.Statement.If(condition, thenStatements, elseStatements);
     }
 
     /**
@@ -79,7 +176,31 @@ public final class Parser {
      * {@code FOR}.
      */
     public Ast.Statement.For parseForStatement() throws ParseException {
-        throw new UnsupportedOperationException(); //TODO
+        expect("FOR");
+        expect("(");
+
+        Optional<Ast.Statement> initialization = Optional.empty();
+        if (!peek(";")) {
+            initialization = Optional.of(parseStatement());
+        }
+        expect(";");
+
+        Ast.Expression condition = parseExpression();
+        expect(";");
+
+        Optional<Ast.Statement> increment = Optional.empty();
+        if (!peek(")")) {
+            increment = Optional.of(parseStatement());
+        }
+        expect(")");
+
+        List<Ast.Statement> statements = new ArrayList<>();
+        while (!peek("END")) {
+            statements.add(parseStatement());
+        }
+        expect("END");
+
+        return new Ast.Statement.For(initialization.orElse(null), condition, increment.orElse(null), statements);
     }
 
     /**
@@ -88,7 +209,18 @@ public final class Parser {
      * {@code WHILE}.
      */
     public Ast.Statement.While parseWhileStatement() throws ParseException {
-        throw new UnsupportedOperationException(); //TODO
+        expect("WHILE");
+        Ast.Expression condition = parseExpression();
+        expect("DO");
+
+        List<Ast.Statement> statements = new ArrayList<>();
+        while (!peek("END")) {
+            statements.add(parseStatement());
+        }
+
+        expect("END");
+
+        return new Ast.Statement.While(condition, statements);
     }
 
     /**
@@ -97,7 +229,11 @@ public final class Parser {
      * {@code RETURN}.
      */
     public Ast.Statement.Return parseReturnStatement() throws ParseException {
-        throw new UnsupportedOperationException(); //TODO
+        expect("RETURN");
+        Ast.Expression value = parseExpression();
+        expect(";");
+
+        return new Ast.Statement.Return(value);
     }
 
     /**
@@ -111,17 +247,19 @@ public final class Parser {
      * Parses the {@code logical-expression} rule.
      */
     public Ast.Expression parseLogicalExpression() throws ParseException {
-        Ast.Expression left = parseComparisonExpression();
+        Ast.Expression left = parseEqualityExpression();
         while (match("&&") || match("||")) {
             String operator = tokens.get(-1).getLiteral();
-            Ast.Expression right = parseComparisonExpression();
+            Ast.Expression right = parseEqualityExpression();
             left = new Ast.Expression.Binary(operator, left, right);
         }
         return left;
     }
 
-    // added function to assist parseLogicalExpression
-    public Ast.Expression parseComparisonExpression() throws ParseException {
+    /**
+     * Parses the {@code equality-expression} rule.
+     */
+    public Ast.Expression parseEqualityExpression() throws ParseException {
         Ast.Expression left = parseAdditiveExpression();
         while (match("<") || match("<=") || match(">") || match(">=") || match("==") || match("!=")) {
             String operator = tokens.get(-1).getLiteral();
@@ -132,31 +270,69 @@ public final class Parser {
     }
 
     /**
-     * Parses the {@code equality-expression} rule.
-     */
-    public Ast.Expression parseEqualityExpression() throws ParseException {
-        throw new UnsupportedOperationException(); //TODO
-    }
-
-    /**
      * Parses the {@code additive-expression} rule.
      */
     public Ast.Expression parseAdditiveExpression() throws ParseException {
-        throw new UnsupportedOperationException(); //TODO
+        Ast.Expression left = parseMultiplicativeExpression();
+        while (match("+") || match("-")) {
+            String operator = tokens.get(-1).getLiteral();
+            Ast.Expression right = parseMultiplicativeExpression();
+            left = new Ast.Expression.Binary(operator, left, right);
+        }
+        return left;
     }
 
     /**
      * Parses the {@code multiplicative-expression} rule.
      */
     public Ast.Expression parseMultiplicativeExpression() throws ParseException {
-        throw new UnsupportedOperationException(); //TODO
+        Ast.Expression left = parseSecondaryExpression();
+        while (match("*") || match("/")) {
+            String operator = tokens.get(-1).getLiteral();
+            Ast.Expression right = parseSecondaryExpression();
+            left = new Ast.Expression.Binary(operator, left, right);
+        }
+        return left;
     }
 
     /**
      * Parses the {@code secondary-expression} rule.
      */
     public Ast.Expression parseSecondaryExpression() throws ParseException {
-        throw new UnsupportedOperationException(); //TODO
+        Ast.Expression receiver = parsePrimaryExpression();
+        while (match(".")) {
+            Token identifierToken = expect(Token.Type.IDENTIFIER);
+            String name = identifierToken.getLiteral();
+
+            if (peek("(")) {
+                match("(");
+                List<Ast.Expression> arguments = new ArrayList<>();
+                if (!peek(")")) {
+                    do {
+                        arguments.add(parseExpression());
+                    } while (match(","));
+                }
+                expect(")");
+                receiver = new Ast.Expression.Function(Optional.of(receiver), name, arguments);
+            } else {
+                receiver = new Ast.Expression.Access(Optional.of(receiver), name);
+            }
+        }
+        return receiver;
+    }
+
+    // helper expect function
+
+    private Token expect(Object expected) throws ParseException {
+        if (match(expected)) {
+            return tokens.get(-1); // Return the last matched token
+        } else {
+            if (tokens.has(0)) {
+                throw new ParseException("Expected '" + expected + "' but found '" + tokens.get(0).getLiteral() + "'", tokens.get(0).getIndex());
+            } else {
+                throw new ParseException("Expected '" + expected + "' but found end of input", -1);
+            }
+        }
     }
 
     /**
@@ -166,7 +342,70 @@ public final class Parser {
      * not strictly necessary.
      */
     public Ast.Expression parsePrimaryExpression() throws ParseException {
-        throw new UnsupportedOperationException(); //TODO
+        if (match("NIL")) {
+            return new Ast.Expression.Literal(null);
+        } else if (match("TRUE")) {
+            return new Ast.Expression.Literal(Boolean.TRUE);
+        } else if (match("FALSE")) {
+            return new Ast.Expression.Literal(Boolean.FALSE);
+        } else if (match(Token.Type.INTEGER)) {
+            String literal = tokens.get(-1).getLiteral();
+            BigInteger value = new BigInteger(literal);
+            return new Ast.Expression.Literal(value);
+        } else if (match(Token.Type.DECIMAL)) {
+            String literal = tokens.get(-1).getLiteral();
+            BigDecimal value = new BigDecimal(literal);
+            return new Ast.Expression.Literal(value);
+        } else if (match(Token.Type.CHARACTER)) {
+            String literal = tokens.get(-1).getLiteral();
+            // Remove surrounding single quotes
+            literal = literal.substring(1, literal.length() - 1);
+            // Handle escape sequences
+            literal = literal.replace("\\n", "\n")
+                    .replace("\\t", "\t")
+                    .replace("\\b", "\b")
+                    .replace("\\r", "\r")
+                    .replace("\\'", "'")
+                    .replace("\\\"", "\"")
+                    .replace("\\\\", "\\");
+            if (literal.length() != 1) {
+                throw new ParseException("Invalid character literal", tokens.get(-1).getIndex());
+            }
+            return new Ast.Expression.Literal(literal.charAt(0));
+        } else if (match(Token.Type.STRING)) {
+            String literal = tokens.get(-1).getLiteral();
+            // Remove surrounding double quotes
+            literal = literal.substring(1, literal.length() - 1);
+            // Handle escape sequences
+            literal = literal.replace("\\n", "\n")
+                    .replace("\\t", "\t")
+                    .replace("\\b", "\b")
+                    .replace("\\r", "\r")
+                    .replace("\\'", "'")
+                    .replace("\\\"", "\"")
+                    .replace("\\\\", "\\");
+            return new Ast.Expression.Literal(literal);
+        } else if (match("(")) {
+            Ast.Expression expression = parseExpression();
+            expect(")");
+            return new Ast.Expression.Group(expression);
+        } else if (match(Token.Type.IDENTIFIER)) {
+            String name = tokens.get(-1).getLiteral();
+            if (match("(")) {
+                List<Ast.Expression> arguments = new ArrayList<>();
+                if (!peek(")")) {
+                    do {
+                        arguments.add(parseExpression());
+                    } while (match(","));
+                }
+                expect(")");
+                return new Ast.Expression.Function(Optional.empty(), name, arguments);
+            } else {
+                return new Ast.Expression.Access(Optional.empty(), name);
+            }
+        } else {
+            throw new ParseException("Expected an expression", tokens.has(0) ? tokens.get(0).getIndex() : -1);
+        }
     }
 
     /**
