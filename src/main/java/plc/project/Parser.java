@@ -86,6 +86,8 @@ public final class Parser {
         }
         expect_token(")");
 
+        expect_token("DO");
+
         List<Ast.Statement> statements = new ArrayList<>();
         while (!peek("END")) {
             statements.add(parseStatement());
