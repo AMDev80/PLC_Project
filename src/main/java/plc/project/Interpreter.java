@@ -273,7 +273,12 @@ public class Interpreter implements Ast.Visitor<Environment.PlcObject> {
 
     @Override
     public Environment.PlcObject visit(Ast.Expression.Literal ast) {
-        return Environment.create(ast.getLiteral());
+        if (ast.getLiteral() == null) {
+            return Environment.NIL;
+        }
+        else {
+            return Environment.create(ast.getLiteral());
+        }
     }
 
     @Override
