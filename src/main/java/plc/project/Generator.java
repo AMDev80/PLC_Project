@@ -3,7 +3,6 @@ package plc.project;
 import java.io.PrintWriter;
 import java.math.BigDecimal;
 import java.math.BigInteger;
-import java.io.PrintWriter;
 import java.io.StringWriter;
 
 
@@ -41,21 +40,16 @@ public final class Generator implements Ast.Visitor<Void> {
         print("public class Main {");
         indent++;
 
-        // fields
         if (!ast.getFields().isEmpty()) {
             newline(indent);
             for (int i = 0; i < ast.getFields().size(); i++) {
                 visit(ast.getFields().get(i));
-                newline(indent);
+                if (i < ast.getFields().size()) {
+                    newline(indent);
+                }
             }
         }
-
-        // Always print a blank line after fields (even if no fields)
         newline(0);
-
-        // Print main method header
-        // According to the expected: One blank line after class,
-        // then indent the main method at indent=1:
         newline(indent);
         print("public static void main(String[] args) {");
         indent++;
@@ -64,17 +58,12 @@ public final class Generator implements Ast.Visitor<Void> {
         indent--;
         newline(indent);
         print("}");
-
-        // Another blank line after main method
         newline(0);
-
-        // Other methods
         for (int i = 0; i < ast.getMethods().size(); i++) {
             newline(indent);
             visit(ast.getMethods().get(i));
             newline(0);
         }
-
         indent--;
         print("}");
         return null;
@@ -82,13 +71,9 @@ public final class Generator implements Ast.Visitor<Void> {
 
 
 
-
     @Override
     public Void visit(Ast.Field ast) {
-        // type and jvmName from ast.getVariable()
         Environment.Variable var = ast.getVariable();
-        // var.getType().getJvmName() for the type
-        // var.getName() for the jvm name (it's the same as variable name)
         if (ast.getConstant()) {
             print("final ");
         }
@@ -106,13 +91,13 @@ public final class Generator implements Ast.Visitor<Void> {
     public Void visit(Ast.Method ast) {
         Environment.Function function = ast.getFunction();
         String returnType = function.getReturnType().getJvmName();
-        // If NIL => void
         if (function.getReturnType().equals(Environment.Type.NIL)) {
             returnType = "void";
         }
 
         print(returnType, " ", function.getJvmName(), "(");
-        // parameters
+
+        // all parameters
         for (int i = 0; i < function.getParameterTypes().size(); i++) {
             if (i > 0) print(", ");
             Environment.Type paramType = function.getParameterTypes().get(i);
@@ -163,7 +148,7 @@ public final class Generator implements Ast.Visitor<Void> {
 
     @Override
     public Void visit(Ast.Statement.Assignment ast) {
-        // receiver must be access
+        // must have access for for the visit to occur
         Ast.Expression.Access access = (Ast.Expression.Access) ast.getReceiver();
         print(access.getVariable().getJvmName(), " = ");
         visit(ast.getValue());
@@ -179,7 +164,8 @@ public final class Generator implements Ast.Visitor<Void> {
         print(") ");
         if (ast.getThenStatements().isEmpty()) {
             print("{}");
-        } else {
+        }
+        else {
             print("{");
             indent++;
             for (Ast.Statement stmt : ast.getThenStatements()) {
@@ -195,7 +181,8 @@ public final class Generator implements Ast.Visitor<Void> {
             print(" else ");
             if (ast.getElseStatements().isEmpty()) {
                 print("{}");
-            } else {
+            }
+            else {
                 print("{");
                 indent++;
                 for (Ast.Statement stmt : ast.getElseStatements()) {
@@ -214,17 +201,14 @@ public final class Generator implements Ast.Visitor<Void> {
     public Void visit(Ast.Statement.For ast) {
         print("for (");
         if (ast.getInitialization() != null) {
-            print(" ");
             print(generateInlineStatement(ast.getInitialization()));
         }
         print(";");
-
         if (ast.getCondition() != null) {
             print(" ");
             visit(ast.getCondition());
         }
         print(";");
-
         if (ast.getIncrement() != null) {
             print(" ");
             print(generateInlineStatement(ast.getIncrement()));
@@ -233,7 +217,8 @@ public final class Generator implements Ast.Visitor<Void> {
 
         if (ast.getStatements().isEmpty()) {
             print("{}");
-        } else {
+        }
+        else {
             print("{");
             indent++;
             for (Ast.Statement stmt : ast.getStatements()) {
@@ -248,26 +233,29 @@ public final class Generator implements Ast.Visitor<Void> {
     }
 
 
+
     private String generateInlineStatement(Ast.Statement stmt) {
         StringWriter sw = new StringWriter();
-        PrintWriter tempWriter = new PrintWriter(sw);
-        PrintWriter originalWriter = this.writer;
+        PrintWriter temp_writer = new PrintWriter(sw);
+        PrintWriter orig_writer = this.writer;
 
         try {
-            this.writer = tempWriter;
-            visit(stmt); // Generate the statement
-        } catch (Exception e) {
-            throw new RuntimeException("Error generating inline statement for: " + stmt.getClass().getSimpleName(), e);
-        } finally {
-            this.writer = originalWriter; // Restore the original writer
+            this.writer = temp_writer;
+            visit(stmt);
+        }
+        finally {
+            this.writer = orig_writer;
         }
 
-        tempWriter.flush();
+        temp_writer.flush();
+        temp_writer.close();
         String result = sw.toString().trim();
 
-        // Remove the trailing semicolon if present
         if (result.endsWith(";")) {
             result = result.substring(0, result.length() - 1).trim();
+        }
+        else {
+            result = result.trim();
         }
 
         return result;
@@ -283,7 +271,8 @@ public final class Generator implements Ast.Visitor<Void> {
         print(") ");
         if (ast.getStatements().isEmpty()) {
             print("{}");
-        } else {
+        }
+        else {
             print("{");
             indent++;
             for (Ast.Statement stmt : ast.getStatements()) {
@@ -312,17 +301,23 @@ public final class Generator implements Ast.Visitor<Void> {
         Object value = ast.getLiteral();
         if (value == null) {
             print("null");
-        } else if (value instanceof Boolean) {
+        }
+        else if (value instanceof Boolean) {
             print(((Boolean)value) ? "true" : "false");
-        } else if (value instanceof Character) {
+        }
+        else if (value instanceof Character) {
             print("'", value.toString(), "'");
-        } else if (value instanceof String) {
+        }
+        else if (value instanceof String) {
             print("\"", value.toString(), "\"");
-        } else if (value instanceof BigInteger) {
+        }
+        else if (value instanceof BigInteger) {
             print(value.toString());
-        } else if (value instanceof BigDecimal) {
+        }
+        else if (value instanceof BigDecimal) {
             print(value.toString());
-        } else {
+        }
+        else {
             throw new RuntimeException("Unknown literal type");
         }
         return null;
@@ -349,13 +344,11 @@ public final class Generator implements Ast.Visitor<Void> {
 
     @Override
     public Void visit(Ast.Expression.Access ast) {
-        // If receiver present: receiver.name => print as (receiver).name?
-        // Actually from specs: field access expression is represented as nested Access: The variable in Access node has jvmName
-        // If has receiver:
         if (ast.getReceiver().isPresent()) {
             visit(ast.getReceiver().get());
             print(".", ast.getVariable().getJvmName());
-        } else {
+        }
+        else {
             print(ast.getVariable().getJvmName());
         }
         return null;
@@ -366,10 +359,10 @@ public final class Generator implements Ast.Visitor<Void> {
         if (ast.getReceiver().isPresent()) {
             visit(ast.getReceiver().get());
             print(".", ast.getFunction().getJvmName());
-        } else {
+        }
+        else {
             print(ast.getFunction().getJvmName());
         }
-
         print("(");
         for (int i = 0; i < ast.getArguments().size(); i++) {
             if (i > 0) print(", ");
