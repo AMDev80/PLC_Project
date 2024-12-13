@@ -51,50 +51,75 @@ public final class Parser {
      * Parses the {@code field} rule. This method should only be called if the
      * next tokens start a field, aka {@code LET}.
      */
-    public Ast.Field parseField() throws ParseException {
+    public Ast.Field parseField() throws ParseException { //updated after P4
         expect_token("LET");
-        Token identifier_token = expect_token(Token.Type.IDENTIFIER);
-        String name = identifier_token.getLiteral();
-        Optional<Ast.Expression> value = Optional.empty();
 
+        boolean constant = false;
+        if (match("CONST")) {
+            constant = true;
+        }
+
+        Token identifierToken = expect_token(Token.Type.IDENTIFIER);
+        String name = identifierToken.getLiteral();
+
+        // expect :
+        expect_token(":");
+        Token typeToken = expect_token(Token.Type.IDENTIFIER);
+        String typeName = typeToken.getLiteral();
+
+        Optional<Ast.Expression> value = Optional.empty();
         if (match("=")) {
             value = Optional.of(parseExpression());
         }
 
         expect_token(";");
 
-        return new Ast.Field(name, false, value);
+        return new Ast.Field(name, typeName, constant, value);
     }
 
     /**
      * Parses the {@code method} rule. This method should only be called if the
      * next tokens start a method, aka {@code DEF}.
      */
-    public Ast.Method parseMethod() throws ParseException {
+    public Ast.Method parseMethod() throws ParseException { //updated after P4
         expect_token("DEF");
-        Token identifier_token = expect_token(Token.Type.IDENTIFIER);
-        String name = identifier_token.getLiteral();
+        Token identifierToken = expect_token(Token.Type.IDENTIFIER);
+        String name = identifierToken.getLiteral();
 
         expect_token("(");
         List<String> parameters = new ArrayList<>();
+        List<String> parameterTypeNames = new ArrayList<>();
+
         if (!peek(")")) {
             do {
-                Token param_token = expect_token(Token.Type.IDENTIFIER);
-                parameters.add(param_token.getLiteral());
+                Token paramToken = expect_token(Token.Type.IDENTIFIER);
+                String paramName = paramToken.getLiteral();
+
+                expect_token(":");
+                Token typeToken = expect_token(Token.Type.IDENTIFIER);
+                String paramTypeName = typeToken.getLiteral();
+
+                parameters.add(paramName);
+                parameterTypeNames.add(paramTypeName);
             }
             while (match(","));
         }
+
         expect_token(")");
+        Optional<String> returnTypeName = Optional.empty();
+        if (match(":")) {
+            Token returnTypeToken = expect_token(Token.Type.IDENTIFIER);
+            returnTypeName = Optional.of(returnTypeToken.getLiteral());
+        }
 
         expect_token("DO");
-
         List<Ast.Statement> statements = new ArrayList<>();
         while (!peek("END")) {
             statements.add(parseStatement());
         }
         expect_token("END");
 
-        return new Ast.Method(name, parameters, statements);
+        return new Ast.Method(name, parameters, parameterTypeNames, returnTypeName, statements);
     }
 
     /**
@@ -142,18 +167,25 @@ public final class Parser {
      */
     public Ast.Statement.Declaration parseDeclarationStatement() throws ParseException {
         expect_token("LET");
-        Token identifier_token = expect_token(Token.Type.IDENTIFIER);
-        String name = identifier_token.getLiteral();
-        Optional<Ast.Expression> value = Optional.empty();
+        Token identifierToken = expect_token(Token.Type.IDENTIFIER);
+        String name = identifierToken.getLiteral();
 
+        Optional<String> typeName = Optional.empty();
+        if (match(":")) {
+            Token typeToken = expect_token(Token.Type.IDENTIFIER);
+            typeName = Optional.of(typeToken.getLiteral());
+        }
+
+        Optional<Ast.Expression> value = Optional.empty();
         if (match("=")) {
             value = Optional.of(parseExpression());
         }
 
         expect_token(";");
 
-        return new Ast.Statement.Declaration(name, value);
+        return new Ast.Statement.Declaration(name, typeName, value);
     }
+
 
     /**
      * Parses an if statement from the {@code statement} rule. This method
